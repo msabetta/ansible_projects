@@ -1,0 +1,89 @@
+---
+- name: Installazione Java 8 con EPEL abilitato su CentOS 7
+  hosts: all
+  become: yes
+  gather_facts: yes
+ 
+  vars:
+    java_package: "java-1.8.0-openjdk"
+    java_devel_package: "java-1.8.0-openjdk-devel"
+    java_home_path: "/usr/lib/jvm/java-1.8.0-openjdk"
+ 
+  tasks:
+    - name: Installazione e abilitazione repository EPEL
+      yum:
+        name: epel-release
+        state: present
+      register: epel_install
+      when: ansible_distribution == 'CentOS' and ansible_distribution_major_version == '7'
+ 
+    - name: Abilita repository EPEL
+      ini_file:
+        path: /etc/yum.repos.d/epel.repo
+        section: epel
+        option: enabled
+        value: '1'
+        backup: yes
+      when: epel_install.changed or (ansible_distribution == 'CentOS' and ansible_distribution_major_version == '7')
+ 
+    - name: Aggiorna la cache dei pacchetti yum
+      yum:
+        update_cache: yes
+      when: epel_install.changed
+ 
+    - name: Installa Java 8 OpenJDK (JRE)
+      yum:
+        name: "{{ java_package }}"
+        state: latest
+        enablerepo: "epel,base,updates,extras"
+        disablerepo: "*"
+      register: java_install
+ 
+    - name: Installa Java 8 OpenJDK Devel (JDK)
+      yum:
+        name: "{{ java_devel_package }}"
+        state: latest
+        enablerepo: "epel,base,updates,extras"
+        disablerepo: "*"
+      register: java_devel_install
+ 
+    - name: Imposta Java 8 come default (java)
+      alternatives:
+        name: java
+        path: /usr/lib/jvm/jre-1.8.0-openjdk/bin/java
+      when: java_install.changed or java_devel_install.changed
+ 
+    - name: Imposta javac come default (se JDK installato)
+      alternatives:
+        name: javac
+        path: /usr/lib/jvm/java-1.8.0-openjdk/bin/javac
+      when: java_devel_install.changed
+ 
+    - name: Configura JAVA_HOME nel profilo globale
+      blockinfile:
+        path: /etc/profile.d/java.sh
+        block: |
+          export JAVA_HOME={{ java_home_path }}
+          export PATH=$JAVA_HOME/bin:$PATH
+        create: yes
+      notify:
+        - Load new environment
+ 
+    - name: Verifica installazione combinata
+      shell: |
+        java -version 2>&1 | grep version
+        if command -v javac &>/dev/null; then
+          javac -version 2>&1
+        fi
+      register: java_check
+      args:
+        executable: /bin/bash
+      changed_when: false
+ 
+    - name: Mostra output combinato
+      debug:
+        var: java_check.stdout_lines
+ 
+  handlers:
+    - name: Load new environment
+      command: source /etc/profile.d/java.sh

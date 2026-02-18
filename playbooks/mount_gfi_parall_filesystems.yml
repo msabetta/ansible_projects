@@ -1,0 +1,41 @@
+---
+- name: Aggiungi mount NFS e monta i filesystem
+  hosts: all
+  gather_facts: yes
+  become: yes
+  tasks:
+    - name: Crea le directory di mount se non esistono
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0755'
+      loop:
+        - /mnt/folder1
+        - /mnt/folder2
+        - /mnt/folder3
+        - /mnt/folder4
+
+    - name: Aggiungi righe NFS alla fine di /etc/fstab
+      lineinfile:
+        path: /etc/fstab
+        line: "{{ item }}"
+        state: present
+        insertafter: EOF
+      loop:
+        - "cloudshare.local:/folder1            /mnt/folder1      nfs ro 0 0"
+        - "cloudshare.local:/folder2            /mnt/folder2      nfs ro 0 0"
+        - "cloudshare.local:/folder3            /mnt/folder3      nfs rw 0 0"
+        - "cloudshare.local:/folder4            /mnt/folder4      nfs rw 0 0"
+
+    - name: Monta filesystem NFS
+      mount:
+        path: "{{ item.path }}"
+        src: "{{ item.src }}"
+        fstype: nfs
+        opts: "{{ item.opts }}"
+        state: mounted
+      loop:
+        - { path: /mnt/folder1,src: cloudshare.local:/folder1,opts: ro }
+        - { path: /mnt/folder2,src: cloudshare.local:/folder2,opts: ro }
+        - { path: /mnt/folder3,src: cloudshare.local:/folder3,opts: rw }
+        - { path: /mnt/folder4,src: cloudshare.local:/folder4,opts: rw }

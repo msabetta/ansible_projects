@@ -1,0 +1,30 @@
+---
+- name: Display chronyd configuration
+  hosts: all
+  become: yes
+  gather_facts: yes
+
+  tasks:
+    - name: Backup di /etc/chrony.conf
+      copy:
+        src: /etc/chrony.conf
+        dest: "/etc/chrony.{{ ansible_date_time.iso8601 }}"
+        remote_src: yes
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Display Server NTP configured (before)
+      ansible.builtin.shell: "grep server /etc/chrony.conf"
+
+    - name: Assicurati che server 10.0.32.3 sia decommentato
+      ansible.builtin.lineinfile:
+        path: /etc/chrony.conf
+        regexp: '^[#\s]*server\s+10\.0\.32\.3'
+        line: 'server 10.0.32.3'
+
+    - name: Display Server NTP configured (after)
+      ansible.builtin.shell: "grep server /etc/chrony.conf"
+    
+    - name: Restart chronyd service
+      ansible.builtin.shell: "systemctl restart chronyd"

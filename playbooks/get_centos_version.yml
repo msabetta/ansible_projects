@@ -1,0 +1,29 @@
+---
+- name: Get CentOS version
+  hosts: all
+  gather_facts: no
+  tasks:
+    - name: Check if CentOS
+      shell: |
+        if [ -f /etc/centos-release ]; then
+          cat /etc/centos-release
+        elif [ -f /etc/redhat-release ]; then
+          cat /etc/redhat-release
+        elif [ -f /etc/os-release ]; then
+          grep -E '^PRETTY_NAME=' /etc/os-release | cut -d'"' -f2
+        else
+          echo "Not a CentOS/RHEL system"
+          exit 1
+        fi
+      register: centos_version
+      ignore_errors: yes
+ 
+    - name: Display CentOS version
+      debug:
+        var: centos_version.stdout
+      when: centos_version.rc == 0
+ 
+    - name: Fail if not CentOS
+      fail:
+        msg: "This is not a CentOS machine"
+      when: centos_version.rc != 0

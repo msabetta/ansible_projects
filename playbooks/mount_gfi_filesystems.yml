@@ -1,0 +1,31 @@
+---
+- name: Aggiungi mount NFS e monta i filesystem
+  hosts: all
+  gather_facts: yes
+  become: yes
+  tasks:
+    - name: Crea le directory di mount se non esistono
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0755'
+      loop:
+        - /mnt/folder1
+        - /mnt/folder2
+        - /mnt/folder3
+        - /mnt/folder4
+
+    - name: Aggiungi le voci NFS a /etc/fstab
+      blockinfile:
+        path: /etc/fstab
+        block: |
+          cloudshare.local:/folder1            /mnt/folder1      nfs ro 0 0
+          cloudshare.local:/folder2            /mnt/folder2      nfs ro 0 0
+          cloudshare.local:/folder3            /mnt/folder3      nfs rw 0 0
+          cloudshare.local:/folder4            /mnt/folder4      nfs rw 0 0
+        state: present
+        create: yes
+        marker: "# {mark} ANSIBLE MANAGED BLOCK"
+
+    - name: Esegui mount -a
+      shell: mount -a

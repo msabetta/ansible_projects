@@ -1,0 +1,38 @@
+---
+- name: Creazione utenza Linux automatica
+  hosts: all
+  become: yes
+  gather_facts: yes
+  serial: 1
+  vars:
+    username: "guest"                             # nome utente da creare
+    user_password_plain: "Password2026!"          # password in chiaro
+    user_group: "linuxgroup"                      # nome gruppo da creare
+    user_shell: "/bin/bash"                       # shell di default
+  tasks:
+    - name: Crea il gruppo 'guest'
+      ansible.builtin.group:
+        name: "{{ user_group }}"
+        state: present
+    - name: Crea l'utente con home directory
+      ansible.builtin.user:
+        name: "{{ username }}"
+        password: "{{ user_password_plain | password_hash('sha512') }}"
+        group: "{{ user_group }}"
+        shell: "{{ user_shell }}"
+        state: present
+        create_home: yes
+    - name: Assicura che la directory home abbia i permessi corretti
+      ansible.builtin.file:
+        path: "/home/{{ username }}"
+        owner: "{{ username }}"
+        group: "{{ user_group }}"
+        mode: '0755'
+        state: directory
+    - name: Verifica che l'utente sia stato creato
+      ansible.builtin.shell: "id {{ username }}"
+      register: user_check
+      ignore_errors: yes
+    - name: Mostra risultato verifica
+      ansible.builtin.debug:
+        msg: "{{ user_check.stdout if user_check.rc == 0 else 'Utente non trovato!' }}"

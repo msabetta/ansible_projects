@@ -1,0 +1,58 @@
+---
+- name: Configura repository SCL per CentOS 7.9
+  hosts: all
+  become: yes
+  tasks:
+    - name: Installazione repository SCL
+      yum:
+        name: centos-release-scl
+        state: present
+    - name: Configurazione repository SCLo scl
+      blockinfile:
+        path: /etc/yum.repos.d/CentOS-SCLo-scl.repo
+        marker: "# {mark} Repository SCLo scl - Configurato da Ansible"
+        block: |
+          [centos-sclo-sclo]
+          name=CentOS-7 - SCLo sclo
+          baseurl=http://vault.centos.org/7.9.2009/sclo/$basearch/sclo/
+          gpgcheck=1
+          enabled=1
+          gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-CentOS-7
+          [centos-sclo-sclo-source]
+          name=CentOS-7 - SCLo sclo Source
+          baseurl=http://vault.centos.org/7.9.2009/sclo/Source/sclo/
+          gpgcheck=1
+          enabled=0
+          gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-CentOS-7
+    - name: Configurazione repository SCLo rh
+      blockinfile:
+        path: /etc/yum.repos.d/CentOS-SCLo-scl-rh.repo
+        marker: "# {mark} Repository SCLo rh - Configurato da Ansible"
+        block: |
+          [centos-sclo-rh]
+          name=CentOS-7 - SCLo rh
+          baseurl=http://vault.centos.org/7.9.2009/sclo/$basearch/rh/
+          gpgcheck=1
+          enabled=1
+          gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-CentOS-7
+          [centos-sclo-rh-source]
+          name=CentOS-7 - SCLo rh Source
+          baseurl=http://vault.centos.org/7.9.2009/sclo/Source/rh/
+          gpgcheck=1
+          enabled=0
+          gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-CentOS-7
+    - name: Pulizia cache yum
+      command: yum clean all
+    - name: Ricostruzione cache yum
+      command: yum makecache
+    - name: Verifica repository SCL
+      command: yum repolist enabled | grep sclo
+      register: sclo_repos
+      changed_when: false
+    - name: Visualizzazione repository SCL configurati
+      debug:
+        msg: "{{ sclo_repos.stdout_lines }}"
+    - name: Download and import CentOS 7 SIG SCLo GPG key
+      rpm_key:
+        key: "https://www.centos.org/keys/RPM-GPG-KEY-CentOS-SIG-SCLo"
+        state: present

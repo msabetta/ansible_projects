@@ -1,0 +1,58 @@
+---
+- name: Raccolta utenti e gruppi Linux
+  hosts: all
+  become: yes
+  gather_facts: yes
+  serial: 1
+
+  vars:
+    output_dir: "/root/ansible/report_utenti"
+
+  tasks:
+
+    - name: Crea directory locale per report
+      delegate_to: dmphclo17.siiau.local
+      run_once: true
+      file:
+        path: "{{ output_dir }}"
+        state: directory
+
+    - name: Ottieni lista utenti
+      command: getent passwd
+      register: passwd_output
+
+    - name: Ottieni lista gruppi
+      command: getent group
+      register: group_output
+
+    - name: Estrai solo nomi utenti
+      shell: "cut -d: -f1 /etc/passwd"
+      register: users_list
+
+    - name: Esegui id per ogni utente
+      shell: "id {{ item }}"
+      loop: "{{ users_list.stdout_lines }}"
+      register: id_output
+      ignore_errors: true
+
+    - name: Costruisci report finale
+      set_fact:
+        report: |
+          ===== HOST: {{ inventory_hostname }} =====
+
+          --- UTENTI (/etc/passwd) ---
+          {{ passwd_output.stdout }}
+
+          --- GRUPPI (/etc/group) ---
+          {{ group_output.stdout }}
+
+          --- DETTAGLIO ID UTENTI ---
+          {% for r in id_output.results %}
+          {{ r.stdout | default('errore utente') }}
+          {% endfor %}
+
+    - name: Salva report su file locale
+      delegate_to: dmphclo17.siiau.local
+      copy:
+        content: "{{ report }}"
+        dest: "{{ output_dir }}/{{ inventory_hostname }}.txt"

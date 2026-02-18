@@ -1,0 +1,92 @@
+---
+# playbook_remediation_etl_stage_issue.yml
+# Ansible playbook per analisi e remediation dell'errore di creazione tabella Hive/Spark
+# Verifica stato della tabella, path HDFS associato e propone (o esegue) azioni correttive.
+# Utilizzo: ansible-playbook playbook_remediation_etl_stage_issue.yml -e "dry_run=true force_drop=false"
+
+- name: Diagnostica e remediation ETL stage Hive/Spark
+  hosts: all
+  become: yes
+  gather_facts: true
+  vars:
+    hdfs_path: "/user/hive/warehouse/database/misurazioni.db/etl_stage_meas"
+    backup_base: "/user/backup/etl_stage3m_2_backups"
+    hive_db: "misurazioni"
+    hive_table: "etl_stage_meas"
+    hive_user: "guest"
+    hive_cmd: "beeline -u 'jdbc:hive2://localhost:10000' -n guest -p '' -e"
+    dry_run: true
+    force_drop: false
+
+  tasks:
+    - name: Controlla esistenza path HDFS
+      shell: hdfs dfs -test -d {{ hdfs_path }}
+      register: hdfs_exists
+      ignore_errors: yes
+
+    - name: Lista dettagliata HDFS (se esiste)
+      shell: |
+        hdfs dfs -ls -d {{ hdfs_path }}
+        hdfs dfs -ls -R {{ hdfs_path }} | head -200
+        hdfs dfs -stat %n\ %u\ %g\ %A {{ hdfs_path }} || true
+        hdfs dfs -getfacl {{ hdfs_path }} || true
+      when: hdfs_exists.rc == 0
+      register: hdfs_info
+      changed_when: false
+
+    - name: Mostra tabella Hive se esiste
+      shell: "{{ hive_cmd }} \"USE {{ hive_db }}; SHOW TABLES LIKE '{{ hive_table }}';\""
+      register: show_tables
+      changed_when: false
+
+    - name: DESCRIBE FORMATTED tabella Hive (se presente)
+      shell: "{{ hive_cmd }} \"USE {{ hive_db }}; DESCRIBE FORMATTED {{ hive_table }};\""
+      register: describe_table
+      ignore_errors: yes
+      changed_when: false
+
+    - name: Aggrega risultati diagnostici in formato JSON
+      set_fact:
+        diagnostics_json: |
+          {
+            "hdfs_path": "{{ hdfs_path }}",
+            "hdfs_exists": {{ (hdfs_exists.rc == 0) | to_json }},
+            "show_tables_output": {{ show_tables.stdout | to_json }},
+            "describe_table_output": {{ describe_table.stdout | default('n/a') | to_json }},
+            "dry_run": {{ dry_run | to_json }},
+            "force_drop": {{ force_drop | to_json }}
+          }
+
+    - name: Stampa risultati diagnostici in formato JSON
+      debug:
+        var: diagnostics_json
+
+    - name: Salva risultati diagnostici in file JSON
+      copy:
+        dest: "/tmp/etl_diagnostics_{{ hive_table }}.json"
+        content: "{{ diagnostics_json }}"
+
+    - name: Backup directory HDFS se tabella non presente nel metastore
+      when:
+        - hdfs_exists.rc == 0
+        - show_tables.stdout is not search(hive_table)
+      shell: |
+        backup_path={{ backup_base }}/etl_stage3m_2_$(date +%Y%m%d_%H%M%S)
+        echo "Backup path: $backup_path"
+        {{ 'hdfs dfs -mkdir -p ' ~ backup_base ~ ' && hdfs dfs -mv ' ~ hdfs_path ~ ' $backup_path' if not dry_run else 'echo DRY_RUN: skipping mv' }}
+      register: backup_result
+
+    - name: Drop tabella Hive (se presente e force_drop=true)
+      when:
+        - force_drop
+        - show_tables.stdout is search(hive_table)
+      shell: |
+        {{ hive_cmd }} "USE {{ hive_db }}; DROP TABLE IF EXISTS {{ hive_table }};"
+        {{ 'hdfs dfs -rm -r ' ~ hdfs_path if not dry_run else 'echo DRY_RUN: skipping delete' }}
+      register: drop_result
+
+    - name: Genera suggerimento per creazione tabella EXTERNAL o MANAGED
+      debug:
+        msg:
+          - "Suggerimento SQL (EXTERNAL, sicuro): CREATE EXTERNAL TABLE {{ hive_db }}.{{ hive_table }} (...) LOCATION '{{ hdfs_path }}';"
+          - "Suggerimento SQL (MANAGED, dopo pulizia): CREATE TABLE {{ hive_db }}.{{ hive_table }} (...);"

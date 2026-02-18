@@ -1,0 +1,54 @@
+---
+- name: Monitor MySQL connections on one host
+  hosts: all
+  become: yes
+  gather_facts: true
+
+  vars:
+    mysql_root_user: root
+    timestamp: "{{ lookup('pipe', 'date +%Y%m%d_%H%M%S') }}"
+    log_path: "/root/ansible/mysql_monitoring_logs/mysql_connection_monitor_{{ timestamp }}.log"
+    log_dir: "/root/ansible/mysql_monitoring_logs"
+
+  environment:
+    MYSQL_PWD: "Password2026!"
+
+  tasks:
+
+    - name: Ensure log directory exists
+      ansible.builtin.file:
+        path: "{{ log_dir }}"
+        state: directory
+        mode: '0755'
+        owner: root
+        group: root
+
+    - name: Create log header with timestamp
+      ansible.builtin.shell: |
+        echo "==== MYSQL CONNECTION MONITOR ====" >> "{{ log_path }}"
+        echo "Date and time: $(date '+%Y-%m-%d %H:%M:%S')" >> "{{ log_path }}"
+        echo "==================================" >> "{{ log_path }}"
+        echo "" >> "{{ log_path }}"
+      args:
+        executable: /bin/bash
+
+    - name: Capture Linux processes connected to MySQL (port 3306)
+      ansible.builtin.shell: |
+        echo "--- Linux TCP connections (ss) ---" >> "{{ log_path }}"
+        ss -tnp | grep ':3306' >> "{{ log_path }}" || echo "No TCP connections found" >> "{{ log_path }}"
+        echo "" >> "{{ log_path }}"
+      args:
+        executable: /bin/bash
+      ignore_errors: true
+
+    - name: Get MySQL active connections (PROCESSLIST) via CLI
+      ansible.builtin.shell: |
+        echo "--- MySQL Active Connections ---" >> "{{ log_path }}"
+        mysql -u {{ mysql_root_user }} -e "SELECT NOW() AS snapshot_time, USER, HOST, DB, COMMAND, TIME, STATE FROM information_schema.PROCESSLIST;" >> "{{ log_path }}" && echo "" >> "{{ log_path }}"
+      args:
+        executable: /bin/bash
+      ignore_errors: true
+
+    - name: Show where the log is saved
+      ansible.builtin.debug:
+        msg: "Log file created: {{ log_path }}"

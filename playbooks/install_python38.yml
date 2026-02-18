@@ -1,0 +1,33 @@
+---
+- name: Configura repository SCL per CentOS 7.9
+  hosts: all
+  become: yes
+  tasks:
+    - name: Install Python 3.8
+      yum:
+        name: rh-python38
+        state: present
+    - name: Create Python 3.8 environment script
+      copy:
+        content: |
+          #!/bin/bash
+          source /opt/rh/rh-python38/enable
+          export PATH="/opt/rh/rh-python38/root/usr/bin:$PATH"
+          export LD_LIBRARY_PATH="/opt/rh/rh-python38/root/usr/lib64:$LD_LIBRARY_PATH"
+        dest: /etc/profile.d/python38.sh
+        mode: 0755
+    - name: Create symlink for system-wide access
+      file:
+        src: /opt/rh/rh-python38/root/usr/bin/python3.8
+        dest: /usr/bin/python3.8
+        state: link
+        force: yes
+    # Verifica installazione
+    - name: Verify Python 3.8 installation
+      command: /usr/bin/python3.8 --version
+      register: python_version
+      changed_when: false
+    - name: Display installation results
+      debug:
+        msg:
+          - "Python version: {{ python_version.stdout }}"

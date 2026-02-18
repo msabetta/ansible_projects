@@ -1,0 +1,34 @@
+---
+- name: Raccolta storage cluster Cloudera
+  hosts: all
+  serial: 1
+  become: yes
+  gather_facts: yes
+  tasks:
+
+    - name: Copia script di raccolta storage
+      copy:
+        dest: /usr/local/bin/storage_report.sh
+        mode: '0755'
+        content: |
+          #!/bin/bash
+          NODE=$(hostname)
+          echo "=== Report Storage per nodo: $NODE ==="
+          echo "--- HDFS/Isilon ---"
+          hdfs dfsadmin -report | grep -E "Configured Capacity|DFS Remaining|DFS Used"
+          echo "--- Storage Locale ---"
+          df -hT | grep -E "^/dev|Filesystem"
+          echo "--- Storage Montato Esterno ---"
+          df -hT | grep -E "nfs|cifs|glusterfs"
+          echo "--- Mount permanenti (/etc/fstab) ---"
+          grep -E "nfs|cifs|glusterfs" /etc/fstab
+
+    - name: Esegui script di raccolta storage
+      command: /usr/local/bin/storage_report.sh
+      register: storage_output
+
+    - name: Salva output su file locale
+      local_action:
+        module: copy
+        content: "{{ storage_output.stdout }}"
+        dest: "/root/ansible/reports/{{ inventory_hostname }}.txt"

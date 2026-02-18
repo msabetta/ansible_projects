@@ -1,0 +1,62 @@
+---
+- name: Monitoraggio giornaliero delle connessioni MySQL e metriche per utenze
+  hosts: master
+  become: yes
+  gather_facts: true
+  
+  vars:
+    mysql_user: "root"
+    mysql_password: "Password2026!"
+    mysql_host: "master1.local"
+    log_dir: "/root/ansible/mysql_monitoring_logs"
+    timestamp_cmd: "date +%Y-%m-%d-%H:%M"
+  tasks:
+    - name: Crea directory log se non esiste
+      file:
+        path: "{{ log_dir }}"
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Crea script di monitoraggio MySQL
+      copy:
+        dest: /usr/local/bin/mysql_monitor.sh
+        mode: '0755'
+        content: |
+          #!/bin/bash
+          LOG_DIR="{{ log_dir }}"
+          MYSQL_USER="{{ mysql_user }}"
+          export MYSQL_PWD="{{ mysql_password }}"
+          export MYSQL_HOST="{{ mysql_host }}"
+          DATE=$(date +%Y-%m-%d-%H:%M)
+          LOG_FILE="$LOG_DIR/$DATE/mysql_connections_$DATE.log"
+          METRICS_FILE="$LOG_DIR/$DATE/mysql_metrics_$DATE.log"
+
+          mkdir -p "$LOG_DIR/$DATE"
+
+          echo "----- MySQL Connection Snapshot: $(date) -----" >> "$LOG_FILE"
+          mysql -u "$MYSQL_USER" -e "SELECT USER, HOST, DB, COMMAND, TIME, STATE FROM INFORMATION_SCHEMA.PROCESSLIST;" >> "$LOG_FILE" 2>/dev/null
+
+          # Calcola metriche per utente
+          echo "----- Metriche per utente: $(date) -----" >> "$METRICS_FILE"
+          mysql -u "$MYSQL_USER" -N -e "
+            SELECT USER,
+                   COUNT(*) AS total_connessioni,
+                   AVG(TIME) AS tempo_medio_sec,
+                   MAX(TIME) AS tempo_massimo_sec
+            FROM INFORMATION_SCHEMA.PROCESSLIST
+            WHERE USER IS NOT NULL AND USER <> ''
+            GROUP BY USER;
+          " >> "$METRICS_FILE" 2>/dev/null
+
+          # Pulisce log più vecchi di 30 giorni
+          find "$LOG_DIR" -type f -mtime +30 -name "mysql_*.log" -delete
+
+    - name: Crea cron job per eseguire il monitoraggio ogni ora
+      cron:
+        name: "Monitoraggio MySQL giornaliero"
+        user: root
+        job: "/usr/local/bin/mysql_monitor.sh"
+        minute: "0"
+        hour: "*/1"

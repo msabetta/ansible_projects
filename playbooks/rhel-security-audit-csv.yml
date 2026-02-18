@@ -1,0 +1,107 @@
+---
+- name: RHEL Security Audit -> CSV
+  hosts: all
+  become: yes
+  gather_facts: yes
+  serial: 1
+
+  vars:
+    csv_file: "/root/ansible/security_audit_report.csv"
+
+  tasks:
+
+  - name: Ensure RedHat family
+    fail:
+      msg: "Only RedHat family supported"
+    when: ansible_os_family != "RedHat"
+
+  # -------------------------
+  # Raccolta dati
+  # -------------------------
+
+  - name: Check updates
+    command: dnf check-update
+    register: updates
+    failed_when: false
+    changed_when: false
+
+  - name: SELinux
+    command: getenforce
+    register: selinux
+    changed_when: false
+
+  - name: Firewalld
+    command: firewall-cmd --state
+    register: firewall
+    failed_when: false
+    changed_when: false
+
+  - name: auditd status
+    systemd:
+      name: auditd
+    register: auditd_status
+    failed_when: false
+
+  - name: SSH root login
+    shell: grep -Ei '^PermitRootLogin' /etc/ssh/sshd_config || echo NOT_SET
+    register: ssh_root
+    changed_when: false
+
+  - name: SSH password auth
+    shell: grep -Ei '^PasswordAuthentication' /etc/ssh/sshd_config || echo NOT_SET
+    register: ssh_pass
+    changed_when: false
+
+  - name: Users with shell
+    shell: |
+      awk -F: '$7 !~ /(nologin|false)/ {print $1}' /etc/passwd | wc -l
+    register: users
+    changed_when: false
+
+  - name: ASLR
+    command: cat /proc/sys/kernel/randomize_va_space
+    register: aslr
+    changed_when: false
+
+  # -------------------------
+  # Costruzione riga CSV
+  # -------------------------
+
+  - name: Build CSV line
+    set_fact:
+      csv_line: >-
+        {{ inventory_hostname }},
+        {{ selinux.stdout }},
+        {{ firewall.stdout | default('disabled') }},
+        {{ auditd_status.status.ActiveState | default('unknown') }},
+        {{ ssh_root.stdout }},
+        {{ ssh_pass.stdout }},
+        {{ users.stdout }},
+        {{ aslr.stdout }},
+        {{ 'updates_pending' if updates.rc == 100 else 'up_to_date' }}
+
+  # -------------------------
+  # Header CSV (una sola volta)
+  # -------------------------
+
+  - name: Create CSV header
+    copy:
+      dest: "{{ csv_file }}"
+      content: "host,selinux,firewall,auditd,ssh_root,ssh_password,users_with_shell,aslr,updates\n"
+      force: no
+    delegate_to: dmphclo17.siiau.local
+    run_once: true
+
+  # -------------------------
+  # Scrittura CSV
+  # -------------------------
+
+  - name: Append host data to CSV
+    lineinfile:
+      path: "{{ csv_file }}"
+      line: "{{ csv_line }}"
+      create: yes
+    delegate_to: dmphclo17.siiau.local
+
+  - debug:
+      msg: "Audit exported for {{ inventory_hostname }}"

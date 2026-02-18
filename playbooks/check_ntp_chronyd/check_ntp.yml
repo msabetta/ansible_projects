@@ -1,0 +1,41 @@
+---
+- name: Check NTP and Chrony status on hosts
+  hosts: all
+  gather_facts: yes
+  become: yes
+  serial: 1
+  tasks:
+    - name: Check if chrony is installed
+      ansible.builtin.shell: "rpm -q chrony || dpkg -s chrony"
+      register: chrony_pkg
+      ignore_errors: yes
+
+    - name: Check if chronyd service is running
+      ansible.builtin.shell: "systemctl is-active chronyd"
+      register: chronyd_svc
+      ignore_errors: yes
+
+    - name: Check if ntp is installed
+      ansible.builtin.shell: "rpm -q ntp || dpkg -s ntp"
+      register: ntp_pkg
+      ignore_errors: yes
+
+    - name: Check if ntpd service is running
+      ansible.builtin.shell: "systemctl is-active ntpd"
+      register: ntpd_svc
+      ignore_errors: yes
+
+    - name: Save results into JSON
+      ansible.builtin.set_fact:
+        ntp_report:
+          host: "{{ inventory_hostname }}"
+          chrony_installed: "{{ 'installed' if chrony_pkg.rc == 0 else 'not installed' }}"
+          chronyd_status: "{{ chronyd_svc.stdout if chronyd_svc.rc == 0 else 'inactive' }}"
+          ntp_installed: "{{ 'installed' if ntp_pkg.rc == 0 else 'not installed' }}"
+          ntpd_status: "{{ ntpd_svc.stdout if ntpd_svc.rc == 0 else 'inactive' }}"
+    
+    - name: Append results into JSON file
+      local_action:
+        module: shell
+        cmd: "echo '{{ ntp_report | to_json }}' >> ./ntp_results.json"
+      delegate_to: localhost

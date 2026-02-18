@@ -1,0 +1,152 @@
+---
+- name: Upgrade Oracle Linux 7.9 → 8.10 con rollback-safe
+  hosts: all
+  serial: 1
+  become: yes
+  gather_facts: yes
+  vars:
+    backup_dir: /root/ol7_backup_{{ ansible_date_time.iso8601 }}
+    leapp_logs_dir: /var/log/leapp
+    min_free_space_gb: 20
+    snapshot_file: /root/ol7_package_snapshot_{{ ansible_date_time.iso8601 }}.txt
+
+  tasks:
+
+    - name: Aggiorna tutti i pacchetti OL7 all'ultima release
+      yum:
+        name: '*'
+        state: latest
+
+    - name: Installa strumenti necessari per upgrade
+      yum:
+        name:
+          - leapp
+          - leapp-repository
+          - leapp-data
+          - yum-utils
+          - dnf
+          - python3-dnf
+        state: present
+
+    - name: Verifica spazio libero su /
+      command: df -BG / | tail -1 | awk '{print $4}' | sed 's/G//'
+      register: free_space
+
+    - name: Fallisce se spazio libero insufficiente
+      fail:
+        msg: "Spazio libero su / insufficiente ({{ free_space.stdout }} GB), minimo richiesto: {{ min_free_space_gb }} GB"
+      when: free_space.stdout | int < min_free_space_gb
+
+    - name: Controlla pacchetti bloccati con yum versionlock
+      command: yum versionlock list
+      register: locked_packages
+      ignore_errors: yes
+
+    - name: Fallisce se ci sono pacchetti bloccati
+      fail:
+        msg: "Ci sono pacchetti bloccati, rimuoverli prima dell'upgrade: {{ locked_packages.stdout_lines }}"
+      when: locked_packages.stdout != ""
+
+    - name: Crea cartella backup
+      file:
+        path: "{{ backup_dir }}"
+        state: directory
+        mode: 0700
+
+    - name: Backup dei file .repo esistenti
+      copy:
+        src: /etc/yum.repos.d/
+        dest: "{{ backup_dir }}/repos/"
+        owner: root
+        group: root
+        mode: 0600
+        remote_src: yes
+
+    - name: Backup directory /etc
+      synchronize:
+        src: /etc/
+        dest: "{{ backup_dir }}/etc_backup/"
+        recursive: yes
+        rsync_opts:
+          - "--archive"
+          - "--compress"
+          - "--checksum"
+
+    - name: Salva snapshot pacchetti installati OL7
+      command: rpm -qa --qf "%{NAME}-%{VERSION}-%{RELEASE}.%{ARCH}\n"
+      register: package_snapshot
+    - name: Scrive snapshot pacchetti su file
+      copy:
+        content: "{{ package_snapshot.stdout }}"
+        dest: "{{ snapshot_file }}"
+        owner: root
+        group: root
+        mode: 0644
+
+    - name: Esegui preupgrade con leapp
+      command: leapp preupgrade
+      register: preupgrade
+      ignore_errors: yes
+
+    - name: Salva log preupgrade
+      copy:
+        content: "{{ preupgrade.stdout }}"
+        dest: "{{ leapp_logs_dir }}/leapp-preupgrade-{{ ansible_date_time.iso8601 }}.log"
+        owner: root
+        group: root
+        mode: 0644
+
+    - name: Esegui upgrade OL7 → OL8 automaticamente
+      command: leapp upgrade
+      register: leapp_upgrade
+      ignore_errors: yes
+
+    - name: Salva log upgrade
+      copy:
+        content: "{{ leapp_upgrade.stdout }}"
+        dest: "{{ leapp_logs_dir }}/leapp-upgrade-{{ ansible_date_time.iso8601 }}.log"
+        owner: root
+        group: root
+        mode: 0644
+
+    - name: Riavvia sistema per completare upgrade
+      reboot:
+        msg: "Riavvio automatico dopo leapp upgrade OL7→OL8"
+        connect_timeout: 5
+        reboot_timeout: 900
+
+    - name: Attendi che il sistema sia di nuovo raggiungibile
+      wait_for_connection:
+        timeout: 600
+
+    - name: Verifica versione OL dopo upgrade
+      command: cat /etc/os-release
+      register: osrelease
+
+    - name: Mostra versione OL aggiornata
+      debug:
+        var: osrelease.stdout_lines
+
+    - name: Aggiorna tutti i pacchetti OL8 all'ultima release
+      dnf:
+        name: '*'
+        state: latest
+
+    - name: Pulizia cache DNF
+      dnf:
+        state: clean all
+
+    - name: Verifica repo attivi dopo upgrade
+      command: dnf repolist enabled
+      register: repolist_post
+
+    - name: Mostra repo attivi post-upgrade
+      debug:
+        var: repolist_post.stdout_lines
+
+    - name: Info rollback-safe
+      debug:
+        msg: |
+          Backup dei file di configurazione e repo salvato in {{ backup_dir }}
+          Snapshot pacchetti OL7 salvato in {{ snapshot_file }}
+          In caso di problemi, puoi reinstallare OL7 utilizzando i backup.

@@ -1,0 +1,50 @@
+---
+- name: Gestione mount NFS in fstab (Ansible 2.9)
+  hosts: all
+  become: yes
+  vars:
+    nfs_old_mounts:
+      - { path: "/mnt/old-folder1" }
+      - { path: "/mnt/old-folder2" }
+      - { path: "/mnt/old-folder3" }
+    nfs_new_mounts:
+      - { src: "cloudshare.local:/folder1", path: "/mnt/folder1" }
+      - { src: "cloudshare.local:/folder2", path: "/mnt/folder2" }
+      - { src: "cloudshare.local:/folder3", path: "/mnt/folder3" }
+  tasks:
+    - name: Backup di /etc/fstab
+      copy:
+        src: /etc/fstab
+        dest: "/etc/fstab.{{ ansible_date_time.iso8601 }}"
+        remote_src: yes
+        owner: root
+        group: root
+        mode: '0644'
+    - name: Smontare vecchi mount NFS
+      mount:
+        path: "{{ item.path }}"
+        state: unmounted
+      with_items: "{{ nfs_old_mounts }}"
+      ignore_errors: yes
+    - name: Rimuovere vecchie entry NFS da fstab
+      lineinfile:
+        path: /etc/fstab
+        state: absent
+        regexp: "^{{ item.path | regex_escape() }}\\s+.*nfs"
+      with_items: "{{ nfs_old_mounts }}"
+    - name: Creare directory mountpoint per i nuovi
+      file:
+        path: "{{ item.path }}"
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+      with_items: "{{ nfs_new_mounts }}"
+    - name: Aggiungere e montare nuovi mount NFS (read-only)
+      mount:
+        src: "{{ item.src }}"
+        path: "{{ item.path }}"
+        fstype: nfs
+        opts: ro
+        state: mounted
+      with_items: "{{ nfs_new_mounts }}"

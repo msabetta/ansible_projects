@@ -1,0 +1,47 @@
+---
+- name: Esegui comandi con shell e crea un report unico
+  hosts: all
+  gather_facts: yes
+  become: yes
+
+  vars:
+    report_path: "./report_fstab_030925.txt"
+    comandi:
+      - "df -h | grep /mnt/folder1"
+      - "df -h | grep /mnt/folder2"
+      - "df -h | grep /mnt/folder3"
+
+  tasks:
+    - name: Esegui comandi via shell
+      shell: "{{ item }}"
+      register: comando_output
+      loop: "{{ comandi }}"
+
+    - name: Crea un report per ogni host
+      copy:
+        dest: "report_{{ inventory_hostname }}.txt"
+        content: |
+          ===== Report per {{ inventory_hostname }} =====
+          {% for ris in comando_output.results %}
+          ### Comando: {{ ris.item }}
+          {{ ris.stdout }}
+          {% if ris.stderr %}
+          (stderr) {{ ris.stderr }}
+          {% endif %}
+          {% endfor %}
+      delegate_to: localhost
+      run_once: false
+
+    - name: Unisci i report di tutti gli host in un file unico
+      assemble:
+        src: "."
+        dest: "{{ report_path }}"
+        regexp: "^report_.*\\.txt$"
+      delegate_to: localhost
+      run_once: true
+
+    - name: Mostra il percorso del report finale
+      debug:
+        msg: "Report generato in: {{ report_path }}"
+      delegate_to: localhost
+      run_once: true

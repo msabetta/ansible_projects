@@ -1,0 +1,44 @@
+---
+- name: Riavvio sicuro macchine CentOS 7 (Ansible 2.4.2-compatibile)
+  hosts: workers
+  serial: 1  # Elabora un host alla volta
+  become: yes
+  gather_facts: yes
+ 
+  vars:
+    reboot_timeout: 600  # Timeout attesa riavvio (secondi)
+    retry_delay: 30     # Secondi tra i tentativi di ping
+ 
+  tasks:
+    - name: "[1/4] Notifica inizio riavvio {{ inventory_hostname }}"
+      debug:
+        msg: "Inizio riavvio per {{ inventory_hostname }}"
+ 
+    - name: "[2/4] Esegui riavvio (comando shell)"
+      shell: |
+        # Forza sync e avvia riavvio in background
+        sync && nohup shutdown -r now "Riavvio Ansible" >/dev/null 2>&1 &
+        sleep 3  # Tempo per avviare il riavvio
+      args:
+        warn: no  # Disabilita warning Ansible
+      async: 10  # Timeout breve (il comando è in background)
+      poll: 0     # Non attendere completamento
+ 
+    - name: "[3/4] Attesa riavvio completato (con timeout)"
+      local_action: >        
+        wait_for 
+        host={{ inventory_hostname }} 
+        port=22 
+        state=started 
+        delay={{ retry_delay }} 
+        timeout={{ reboot_timeout }}
+ 
+    - name: "[4/4] Verifica connessione post-riavvio"
+      wait_for_connection:
+        delay: 20
+        timeout: 120
+      changed_when: false
+ 
+    - name: "[SUCCESS] Conferma riavvio completato"
+      debug:
+        msg: "{{ inventory_hostname }} riavviato correttamente"

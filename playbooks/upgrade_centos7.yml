@@ -1,0 +1,59 @@
+---
+- name: Upgrade CentOS 7 to latest 7.x version (NO REBOOT)
+  hosts: all
+  become: yes
+  gather_facts: yes
+ 
+  tasks:
+    - name: Verify CentOS 7
+      shell: |
+        if grep -q 'CentOS Linux release 7' /etc/centos-release; then
+          echo "CentOS 7 detected"
+        else
+          echo "Not CentOS 7"
+          exit 1
+        fi
+      register: centos_check
+      ignore_errors: yes
+      changed_when: false
+ 
+    - name: Fail if not CentOS 7
+      fail:
+        msg: "This machine is not running CentOS 7 - aborting"
+      when: centos_check.rc != 0
+ 
+    - name: Check current version
+      shell: cat /etc/centos-release
+      register: current_version
+      changed_when: false
+ 
+    - name: Display current version
+      debug:
+        var: current_version.stdout
+ 
+    - name: Clean yum cache (alternativa per Ansible 2.4)
+      shell: yum clean all
+      args:
+        warn: no  # Disabilita warning su comando shell
+ 
+    - name: Update all packages (excluding kernel)
+      yum:
+        name: '*'
+        state: latest
+        exclude: kernel*
+        update_cache: yes
+ 
+    - name: Update kernel separately (to avoid dependency issues)
+      yum:
+        name: kernel
+        state: latest
+        update_cache: yes
+ 
+    - name: Verify final version
+      shell: cat /etc/centos-release
+      register: final_version
+      changed_when: false
+ 
+    - name: Display final version
+      debug:
+        var: final_version.stdout

@@ -1,0 +1,44 @@
+---
+- name: Esegue find sui nodi remoti e salva i risultati in locale
+  hosts: all
+  gather_facts: yes
+
+  vars:
+    search_path: "/mnt"
+    find_pattern: "-name '*.jar' -o -name '*.sh'"
+    local_output_dir: "./storico_find"
+
+  tasks:
+
+    - name: Esegue find sul nodo remoto
+      command: find {{ search_path }} -type f -name \("{{ find_pattern }}" \)
+      register: find_result
+      changed_when: false
+
+    - name: Crea directory base locale
+      file:
+        path: "{{ local_output_dir }}"
+        state: directory
+        mode: "0755"
+      delegate_to: master1.local
+      run_once: true
+
+    - name: Crea directory locale per host
+      file:
+        path: "{{ local_output_dir }}/{{ inventory_hostname }}"
+        state: directory
+        mode: "0755"
+      delegate_to: master1.local
+
+    - name: Salva risultati in file locale per host
+      copy:
+        content: |
+          Host: {{ inventory_hostname }}
+          Data: {{ ansible_date_time.iso8601 }}
+          Percorso: {{ search_path }}
+          Pattern: {{ find_pattern }}
+
+          ================= RISULTATI =================
+          {{ find_result.stdout }}
+        dest: "{{ local_output_dir }}/{{ inventory_hostname }}/find_{{ ansible_date_time.date }}_{{ ansible_date_time.time }}.txt"
+      delegate_to: master1.local

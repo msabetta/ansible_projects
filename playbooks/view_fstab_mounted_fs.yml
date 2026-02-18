@@ -1,0 +1,25 @@
+---
+- name: Mostra il contenuto di /etc/mtab su tutte le macchine
+  hosts: all
+  gather_facts: yes
+  tasks:
+    - name: Esegui cat su /etc/fstab
+      shell: cat /etc/mtab | grep folder2
+      register: fstab_output
+
+    - name: Mostra a video l'intero contenuto
+      debug:
+        msg: |
+          ===== {{ inventory_hostname }} =====
+          {{ fstab_output.stdout }}
+
+    - name: Salva i risultati in un unico file locale
+      local_action:
+        module: lineinfile
+        path: ./fstab_report_new_mounted_fs.txt
+        create: yes
+        insertafter: EOF
+        line: |
+          ===== {{ inventory_hostname }} =====
+          {{ fstab_output.stdout }}
+      delegate_to: localhost

@@ -1,0 +1,28 @@
+---
+- name: Gestione utente e gruppo terze_parti
+  hosts: all
+  become: yes
+  gather_facts: yes
+  serial: 1
+  tasks:
+
+    - name: Crea il gruppo terze_parti_group se non esiste
+      ansible.builtin.group:
+        name: terze_parti_group
+        state: present
+
+    - name: Assicura che l’utente terze_parti esista e abbia il gruppo primario corretto
+      ansible.builtin.user:
+        name: terze_parti
+        state: present
+        group: terze_parti_group     # gruppo primario
+        append: yes                  # non rimuove altri gruppi
+        comment: "Utente terze parti"
+
+    - name: Verifica appartenenza ai gruppi
+      ansible.builtin.command: id terze_parti
+      register: id_output
+
+    - name: Mostra risultato
+      ansible.builtin.debug:
+        var: id_output.stdout

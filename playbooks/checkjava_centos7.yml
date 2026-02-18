@@ -1,0 +1,97 @@
+---
+- name: Verifica installazioni Java su CentOS 7
+  hosts: all
+  become: yes
+  gather_facts: yes
+  vars:
+    java_paths:
+      - /usr/bin/java
+      - /usr/lib/jvm
+      - /opt
+      - /usr/local
+      - /home
+  tasks:
+    - name: Verifica pacchetti Java installati via package manager
+      block:
+        - name: Verifica pacchetti Java RPM
+          shell: rpm -qa | grep -E 'java|jdk|jre'
+          register: java_rpm_packages
+          changed_when: false
+          ignore_errors: yes
+        - name: Mostra pacchetti Java installati
+          debug:
+            msg: "Pacchetti Java installati via RPM: {{ java_rpm_packages.stdout_lines }}"
+          when: java_rpm_packages.stdout_lines | length > 0
+      rescue:
+        - name: Segnala errore nel controllo RPM
+          debug:
+            msg: "Errore nel controllo dei pacchetti RPM"
+    - name: Cerca installazioni manuali di Java
+      block:
+        - name: Trova file java nelle directory comuni
+          find:
+            paths: "{{ item }}"
+            patterns: "java"
+            file_type: file
+            recurse: yes
+          register: java_manual_installs
+          loop: "{{ java_paths }}"
+          ignore_errors: yes
+          changed_when: false
+        - name: Estrai percorsi unici di java trovati
+          set_fact:
+            unique_java_paths: "{{ (unique_java_paths | default([])) + [item.path] }}"
+          loop: "{{ java_manual_installs.results | selectattr('files', 'defined') | map(attribute='files') | flatten | selectattr('path', 'defined') | map(attribute='path') | list }}"
+          when: java_manual_installs is defined
+        - name: Verifica versioni delle installazioni manuali trovate
+          block:
+            - name: Ottieni versione Java per ogni installazione trovata
+              command: "{{ item }} -version"
+              register: java_version_output
+              ignore_errors: yes
+              changed_when: false
+              loop: "{{ unique_java_paths }}"
+            - name: Mostra risultati delle versioni Java
+              debug:
+                msg: "Installazione manuale trovata: {{ item.item }} - Versione: {{ item.stderr | default(item.stdout) | regex_replace('\n', '') }}"
+              loop: "{{ java_version_output.results }}"
+              when: item is not skipped
+          when: unique_java_paths is defined and unique_java_paths | length > 0
+      rescue:
+        - name: Segnala errore nella ricerca manuale
+          debug:
+            msg: "Errore nella ricerca delle installazioni manuali di Java"
+    - name: Verifica versione Java predefinita (alternatives)
+      block:
+        - name: Verifica se alternatives è configurato per java
+          stat:
+            path: /etc/alternatives/java
+          register: java_alternatives
+        - name: Ottieni versione Java predefinita
+          command: java -version
+          register: default_java_version
+          ignore_errors: yes
+          changed_when: false
+          when: java_alternatives.stat.exists
+        - name: Mostra versione Java predefinita
+          debug:
+            msg: "Versione Java predefinita: {{ default_java_version.stderr | default(default_java_version.stdout) | regex_replace('\n', '') }}"
+          when: java_alternatives.stat.exists and default_java_version is defined
+      rescue:
+        - name: Segnala errore nel controllo della versione predefinita
+          debug:
+            msg: "Errore nel controllo della versione Java predefinita"
+    - name: Verifica variabile d'ambiente JAVA_HOME
+      block:
+        - name: Ottieni JAVA_HOME
+          shell: echo $JAVA_HOME
+          register: java_home
+          changed_when: false
+        - name: Mostra JAVA_HOME se impostata
+          debug:
+            msg: "JAVA_HOME è impostata a: {{ java_home.stdout }}"
+          when: java_home.stdout != ""
+      rescue:
+        - name: Segnala errore nel controllo di JAVA_HOME
+          debug:
+            msg: "Errore nel controllo della variabile JAVA_HOME"

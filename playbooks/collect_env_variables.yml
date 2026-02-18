@@ -1,0 +1,38 @@
+---
+- name: Raccogliere variabili di ambiente da tutti gli host e salvarle sul controller
+  hosts: all
+  gather_facts: yes
+  become: yes
+  vars:
+    remote_tmp_file: "/tmp/env_vars.txt"   # file temporaneo su host remoto
+    local_output_dir: "./collected_env_vars" # cartella sul controller
+
+  tasks:
+
+    - name: Assicurarsi che la cartella locale esista
+      local_action:
+        module: file
+        path: "{{ local_output_dir }}"
+        state: directory
+        mode: '0755'
+
+    - name: Raccogliere variabili di ambiente
+      shell: printenv
+      register: env_vars
+
+    - name: Salvare le variabili di ambiente su host remoto
+      copy:
+        content: "{{ env_vars.stdout }}"
+        dest: "{{ remote_tmp_file }}"
+        mode: '0644'
+
+    - name: Copiare il file di variabili di ambiente sul controller
+      fetch:
+        src: "{{ remote_tmp_file }}"
+        dest: "{{ local_output_dir }}/env_{{ inventory_hostname }}.txt"
+        flat: yes
+
+    - name: Rimuovere file temporaneo sul nodo remoto
+      file:
+        path: "{{ remote_tmp_file }}"
+        state: absent

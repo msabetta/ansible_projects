@@ -1,0 +1,72 @@
+---
+- name: Verifica criticità del mount /storage e crea report sul nodo host
+  hosts: all
+  gather_facts: yes
+  become: yes
+  
+  vars:
+    storage_mount_point: "/storage"
+    report_dir: "/root/ansible/reports_storage"   # Cartella locale sul nodo host
+
+  tasks:
+
+    - name: Crea la cartella dei report sul nodo host
+      ansible.builtin.file:
+        path: "{{ report_dir }}"
+        state: directory
+        mode: '0755'
+
+    - name: Controlla se il mount /storage esiste
+      ansible.builtin.command: findmnt {{ storage_mount_point }}
+      register: storage_mount_check
+      ignore_errors: yes
+
+    - name: Notifica se il mount /storage non è presente
+      ansible.builtin.set_fact:
+        storage_status: "Il mount {{ storage_mount_point }} NON esiste"
+      when: storage_mount_check.rc != 0
+
+    - name: Recupera lo spazio del filesystem di /storage
+      ansible.builtin.command: "df -h {{ storage_mount_point }}"
+      register: storage_df
+      when: storage_mount_check.rc == 0
+
+    - name: Recupera informazioni generali del filesystem
+      ansible.builtin.command: "mount | grep {{ storage_mount_point }}"
+      register: storage_mount_info
+      when: storage_mount_check.rc == 0
+
+    - name: Esegui test di scrittura per verificare l'accesso
+      ansible.builtin.shell: "touch {{ storage_mount_point }}/.ansible_test_file && rm {{ storage_mount_point }}/.ansible_test_file"
+      register: storage_access_test
+      ignore_errors: yes
+      when: storage_mount_check.rc == 0
+
+    - name: Definisci lo stato finale di /storage
+      ansible.builtin.set_fact:
+        storage_status: >-
+          {% if storage_mount_check.rc != 0 %}
+            NON esiste
+          {% elif storage_access_test.failed %}
+            Accesso NON consentito
+          {% else %}
+            Presente e accessibile
+          {% endif %}
+
+    - name: Crea report sul nodo host
+      ansible.builtin.copy:
+        dest: "{{ report_dir }}/report_{{ inventory_hostname }}.txt"
+        content: |
+          Host: {{ inventory_hostname }}
+          Mount: {{ storage_mount_point }}
+          Stato mount: {{ storage_status }}
+
+          {% if storage_mount_check.rc == 0 %}
+          Spazio filesystem:
+          {{ storage_df.stdout if storage_df is defined else 'N/A' }}
+
+          Informazioni mount:
+          {{ storage_mount_info.stdout if storage_mount_info is defined else 'N/A' }}
+
+          Test accesso: {{ 'Passato' if storage_access_test.failed == False else 'Fallito' }}
+          {% endif %}

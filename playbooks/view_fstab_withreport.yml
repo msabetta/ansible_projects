@@ -1,0 +1,26 @@
+---
+- name: Mostra e raccoglie il contenuto di /etc/fstab su tutte le macchine
+  hosts: all
+  gather_facts: yes
+  tasks:
+    - name: Leggi il file /etc/fstab
+      command: cat /etc/fstab
+      register: fstab_output
+
+    - name: Mostra a video l'intero contenuto
+      debug:
+        msg: |
+          ===== {{ inventory_hostname }} =====
+          {{ fstab_output.stdout }}
+
+    - name: Salva i risultati in un unico file locale
+      local_action:
+        module: lineinfile
+        path: ./fstab_report.txt
+        create: yes
+        insertafter: EOF
+        line: |
+          ===== {{ inventory_hostname }} =====
+          {{ fstab_output.stdout }}
+      delegate_to: master1.local
+

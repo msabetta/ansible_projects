@@ -1,0 +1,74 @@
+---
+- name: Configurazione repo Oracle Linux su RHEL/OL7
+  hosts: all
+  become: yes
+  gather_facts: yes
+  tasks:
+
+    - name: Verifica distribuzione
+      ansible.builtin.setup:
+        filter: ansible_distribution*
+      tags: always
+
+    - name: Rinomina file .repo in .repo.old (solo su RHEL)
+      command: mv {{ item }} {{ item }}.old
+      args:
+        removes: "{{ item }}"
+        creates: "{{ item }}.old"
+      with_fileglob:
+        - /etc/yum.repos.d/*.repo
+      when: ansible_distribution == "RedHat"
+
+    - name: Configura il repo Oracle Linux 7 (solo su RHEL)
+      copy:
+        dest: /etc/yum.repos.d/oracle-linux-ol7.repo
+        content: |
+          [ol7_latest]
+          name=Oracle Linux 7 Latest ($basearch)
+          baseurl=https://yum.oracle.com/repo/OracleLinux/OL7/latest/$basearch/
+          gpgkey=https://yum.oracle.com/RPM-GPG-KEY-oracle-ol7
+          gpgcheck=1
+          enabled=1
+
+          [ol7_optional_latest]
+          name=Oracle Linux 7 Optional Latest ($basearch)
+          baseurl=https://yum.oracle.com/repo/OracleLinux/OL7/optional/latest/$basearch/
+          gpgkey=https://yum.oracle.com/RPM-GPG-KEY-oracle-ol7
+          gpgcheck=1
+          enabled=0
+
+          [ol7_addons]
+          name=Oracle Linux 7 Addons ($basearch)
+          baseurl=https://yum.oracle.com/repo/OracleLinux/OL7/addons/$basearch/
+          gpgkey=https://yum.oracle.com/RPM-GPG-KEY-oracle-ol7
+          gpgcheck=1
+          enabled=0
+      when: ansible_distribution == "RedHat"
+      notify: Refresh yum cache
+
+    - name: Sincronizza pacchetti alla release (distro-sync)
+      yum:
+        name: '*'
+        state: latest
+
+    - name: Mostra versione OS
+      command: cat /etc/os-release
+      register: osrelease
+
+    - name: Debug versione OS
+      debug:
+        var: osrelease.stdout_lines
+
+  handlers:
+    - name: Refresh yum cache
+      block:
+        - name: Pulisce cache yum
+          command: yum clean all
+        - name: Rigenera cache yum
+          command: yum makecache
+        - name: Lista repository abilitati
+          command: yum repolist enabled
+          register: repolist
+        - name: Mostra repo abilitati
+          debug:
+            var: repolist.stdout_lines

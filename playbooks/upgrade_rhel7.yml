@@ -1,0 +1,77 @@
+---
+- name: Aggiornamento sicuro RHEL 7.7 a 7.9 (Ansible 2.11.12)
+  hosts: all
+  become: yes
+  vars:
+    target_release: "7.9"
+    excluded_packages: []  # Pacchetti da escludere
+    backup_dir: "/root/rhel_update_backup"
+
+  tasks:
+
+    - name: Controlla la versione corrente di RHEL
+      command: cat /etc/redhat-release
+      register: rhel_version
+      changed_when: false
+
+    - name: Mostra la versione corrente
+      debug:
+        msg: "Versione corrente di RHEL: {{ rhel_version.stdout }}"
+
+    - name: Crea cartella per backup dei pacchetti installati
+      file:
+        path: "{{ backup_dir }}"
+        state: directory
+        mode: '0755'
+
+    - name: Fai il backup della lista dei pacchetti installati
+      command: rpm -qa > {{ backup_dir }}/packages_before_update.txt
+
+    - name: Aggiorna yum e repository
+      yum:
+        name: yum
+        state: latest
+
+    - name: Aggiorna tutti i pacchetti tranne quelli esclusi
+      yum:
+        name: "*"
+        state: latest
+        exclude: "{{ excluded_packages | join(',') }}"
+
+    - name: Aggiorna redhat-release per passare a 7.9
+      yum:
+        name: redhat-release
+        state: latest
+
+    - name: Esegui l'aggiornamento completo a RHEL 7.9
+      command: yum -y --releasever={{ target_release }} update
+      register: yum_update
+      ignore_errors: yes
+
+    - name: Controlla se è richiesto un riavvio
+      stat:
+        path: /var/run/reboot-required
+      register: reboot_required
+
+    - name: Riavvia il sistema se necessario
+      command: /sbin/reboot
+      async: 1
+      poll: 0
+      when: reboot_required.stat.exists
+
+    - name: Attendi 2 minuti per il riavvio (aggiustabile)
+      wait_for:
+        timeout: 120
+        port: 22
+        host: "{{ inventory_hostname }}"
+        state: started
+      when: reboot_required.stat.exists
+
+    - name: Verifica la versione aggiornata
+      command: cat /etc/redhat-release
+      register: new_version
+      changed_when: false
+
+    - name: Mostra la nuova versione
+      debug:
+        msg: "La versione aggiornata di RHEL è: {{ new_version.stdout }}"

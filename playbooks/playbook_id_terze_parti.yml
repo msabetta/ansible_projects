@@ -1,0 +1,36 @@
+---
+- name: Raccogli informazioni utente "terze_parti" da tutti gli host
+  hosts: all
+  gather_facts: yes
+  serial: 1
+  become: true
+
+  tasks:
+
+    - name: Esegui comando id
+      ansible.builtin.shell: id terze_parti
+      register: id_output
+      ignore_errors: yes
+
+    - name: Estrai uid e gid
+      ansible.builtin.set_fact:
+        uid: "{{ id_output.stdout | regex_search('uid=([0-9]+)', '\\1') }}"
+        gid: "{{ id_output.stdout | regex_search('gid=([0-9]+)', '\\1') }}"
+
+    - name: Aggiungi risultati al file CSV locale
+      ansible.builtin.lineinfile:
+        path: ./output/id_terze_parti.csv
+        line: "{{ inventory_hostname }},{{ uid }},{{ gid }}"
+        create: yes
+        insertafter: EOF
+      delegate_to: "master1.local"
+      run_once: false
+
+    - name: Aggiungi intestazione CSV se non esiste
+      ansible.builtin.lineinfile:
+        path: ./output/id_terze_parti_simplified.csv
+        line: "host,uid,gid"
+        create: yes
+        insertafter: BOF
+      delegate_to: "master1.local"
+      run_once: true

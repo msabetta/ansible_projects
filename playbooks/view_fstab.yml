@@ -1,0 +1,12 @@
+---
+- name: Mostra il contenuto di /etc/fstab su tutte le macchine
+  hosts: all
+  gather_facts: yes
+  tasks:
+    - name: Esegui cat su /etc/fstab
+      command: cat /etc/fstab
+      register: fstab_output
+
+    - name: Mostra il risultato
+      debug:
+        var: fstab_output.stdout

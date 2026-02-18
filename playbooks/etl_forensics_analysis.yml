@@ -1,0 +1,225 @@
+# -------------------------
+# nuovo playbook: etl_forensics_analysis.yml
+# Uso: ansible-playbook etl_forensics_analysis.yml -e "start_date=2025-09-08 end_date=2025-09-13" -i inventory
+
+- name: ETL Forensics Analysis (multi-source)
+  hosts: all
+  gather_facts: yes
+  become: yes
+  vars:
+    start_date: "2025-09-08"
+    end_date: "2025-09-13"
+    hdfs_path: "/user/hive/warehouse/database/misurazioni.db/tabella_stage"
+    hive_db: "misurazioni"
+    hive_table: "tabella_stage"
+    report_base: "/tmp/etl_forensics"
+    cm_host: "10.100.200.158"
+    cm_user: "admin"
+    cm_pass: "Password2026!"
+    metastore_db_host: "10.700.80.160"
+    metastore_db_user: "hive"
+    metastore_db_pass: "PasswordHive2026!"
+    metastore_db_name: "hive"
+    dry_run: true
+
+  tasks:
+    - name: Set report directory per host
+      set_fact:
+        report_dir: "{{ report_base }}/{{ inventory_hostname }}_{{ ansible_date_time.date }}_{{ ansible_date_time.time }}"
+
+    - name: Create report directory
+      file:
+        path: "{{ report_dir }}"
+        state: directory
+        mode: '0755'
+
+    - name: Collect HDFS metadata (ls/stat/acl)
+      shell: |
+        echo "--- HDFS_LS_D ---"
+        hdfs dfs -ls -d {{ hdfs_path }} || true
+        echo "--- HDFS_LS_R (head) ---"
+        hdfs dfs -ls -R {{ hdfs_path }} | head -n 200 || true
+        echo "--- HDFS_STAT ---"
+        hdfs dfs -stat %n\ %u\ %g\ %A {{ hdfs_path }} || true
+        echo "--- HDFS_GETACL ---"
+        hdfs dfs -getfacl {{ hdfs_path }} || true
+      register: hdfs_metadata
+      failed_when: false
+
+    - name: Save HDFS metadata to file
+      copy:
+        dest: "{{ report_dir }}/hdfs_metadata.txt"
+        content: "{{ hdfs_metadata.stdout }}"
+
+    - name: Collect Namenode audit logs filtered by path and date range
+      shell: |
+        mkdir -p {{ report_dir }}/hdfs_audit
+        NAMENODE_AUDIT_DIRS=(/var/log/hadoop/hdfs /var/log/hadoop-namenode)
+        for dir in "${NAMENODE_AUDIT_DIRS[@]}"; do
+          if [ -d "$dir" ]; then
+            for f in $(ls -1 "$dir"/* 2>/dev/null | tail -n 50); do
+              grep -E "{{ start_date }}|{{ end_date }}" "$f" | grep -F "{{ hdfs_path }}" >> "{{ report_dir }}/hdfs_audit/$(basename $f).filtered" || true
+            done
+          fi
+        done
+      args:
+        executable: /bin/bash
+      register: hdfs_audit
+      failed_when: false
+
+    - name: Collect Ranger audit (if present)
+      shell: |
+        mkdir -p {{ report_dir }}/ranger_audit
+        RANGER_DIRS=(/var/log/ranger /var/log/ranger/audit)
+        for dir in "${RANGER_DIRS[@]}"; do
+          if [ -d "$dir" ]; then
+            for f in $(ls -1 "$dir"/* 2>/dev/null | tail -n 50); do
+              grep -E "{{ start_date }}|{{ end_date }}" "$f" | grep -F "{{ hdfs_path }}" >> "{{ report_dir }}/ranger_audit/$(basename $f).filtered" || true
+            done
+          fi
+        done
+      args:
+        executable: /bin/bash
+      register: ranger_audit
+      failed_when: false
+
+    - name: Collect Hive Metastore logs filtered by date
+      shell: |
+        mkdir -p {{ report_dir }}/hive_metastore
+        HIVE_META_LOGS=(/var/log/hive /var/log/hive-server /var/log/hive-metastore)
+        for dir in "${HIVE_META_LOGS[@]}"; do
+          if [ -d "$dir" ]; then
+            for f in $(ls -1 "$dir"/* 2>/dev/null | tail -n 100); do
+              grep -E "{{ start_date }}|{{ end_date }}" "$f" >> "{{ report_dir }}/hive_metastore/$(basename $f).filtered" || true
+            done
+          fi
+        done
+      args:
+        executable: /bin/bash
+      register: hive_metastore_logs
+      failed_when: false
+
+    - name: Run Hive metastore DB query for TBLS creation (optional - requires creds)
+      shell: |
+        echo "-- Metastore query output --"
+        mysql -h {{ metastore_db_host }} -u {{ metastore_db_user }} -p'{{ metastore_db_pass }}' {{ metastore_db_name }} -e "SELECT FROM_UNIXTIME(T.CREATE_TIME) AS create_time, D.NAME AS db_name, T.TBL_NAME FROM TBLS T JOIN DBS D ON T.DB_ID = D.DB_ID WHERE FROM_UNIXTIME(T.CREATE_TIME) BETWEEN '{{ start_date }} 00:00:00' AND '{{ end_date }} 23:59:59' AND D.NAME = '{{ hive_db }}';" || true
+      register: metastore_query
+      failed_when: false
+      #when: metastore_db_pass is not none and metastore_db_pass != '{{ metastore_db_pass }}'
+
+    - name: Save metastore query output
+      copy:
+        dest: "{{ report_dir }}/metastore_query.txt"
+        content: "{{ metastore_query.stdout | default('not_run') }}"
+
+    - name: Collect Spark History logs filtered
+      shell: |
+        mkdir -p {{ report_dir }}/spark_history
+        SPARK_HISTORY_DIRS=(/var/log/spark/history /var/log/spark)
+        for dir in "${SPARK_HISTORY_DIRS[@]}"; do
+          if [ -d "$dir" ]; then
+            for f in $(ls -1 "$dir"/* 2>/dev/null | tail -n 200); do
+              grep -E "{{ start_date }}|{{ end_date }}" "$f" | grep -E "etl_stage3m|etl_stage|misure" >> "{{ report_dir }}/spark_history/$(basename $f).filtered" || true
+            done
+          fi
+        done
+      args:
+        executable: /bin/bash
+      register: spark_history
+      failed_when: false
+
+    - name: Collect YARN logs filtered
+      shell: |
+        mkdir -p {{ report_dir }}/yarn_logs
+        YARN_DIRS=(/var/log/hadoop-yarn /var/log/yarn)
+        for dir in "${YARN_DIRS[@]}"; do
+          if [ -d "$dir" ]; then
+            for f in $(ls -1 "$dir"/* 2>/dev/null | tail -n 200); do
+              grep -E "{{ start_date }}|{{ end_date }}" "$f" | grep -E "etl_stage3m|misure|etl_stage" >> "{{ report_dir }}/yarn_logs/$(basename $f).filtered" || true
+            done
+          fi
+        done
+      args:
+        executable: /bin/bash
+      register: yarn_logs
+      failed_when: false
+
+    - name: Collect Cloudera Manager events via API (optional)
+      uri:
+        url: "http://{{ cm_host }}:7180/api/v19/audit?from={{ start_date }}T00:00:00.000Z&to={{ end_date }}T23:59:59.999Z"
+        method: GET
+        user: "{{ cm_user }}"
+        password: "{{ cm_pass }}"
+        return_content: yes
+        status_code: 200,401,403
+      register: cm_audit
+      failed_when: false
+      #when: cm_pass is not none and cm_pass != '{{ cm_pass }}'
+
+    - name: Save CM audit output
+      copy:
+        dest: "{{ report_dir }}/cm_audit.json"
+        content: "{{ cm_audit.content | default('not_run') }}"
+
+    - name: Collect OS package manager logs (yum/apt)
+      shell: |
+        mkdir -p {{ report_dir }}/os_updates
+        if [ -f /var/log/yum.log ]; then grep -E "{{ start_date }}|{{ end_date }}" /var/log/yum.log > {{ report_dir }}/os_updates/yum.log.filtered || true; fi
+        if [ -f /var/log/apt/history.log ]; then grep -E "{{ start_date }}|{{ end_date }}" /var/log/apt/history.log > {{ report_dir }}/os_updates/apt.history.filtered || true; fi
+      args:
+        executable: /bin/bash
+      register: os_updates
+      failed_when: false
+
+    - name: Gather small snippets for JSON summary (hdfs existence/owner/acl)
+      shell: |
+        if hdfs dfs -test -d {{ hdfs_path }}; then
+          echo "exists=true"
+          hdfs dfs -stat %n\ %u\ %g\ %A {{ hdfs_path }} || true
+          hdfs dfs -getfacl {{ hdfs_path }} || true
+        else
+          echo "exists=false"
+        fi
+      register: hdfs_summary
+      failed_when: false
+
+    - name: Set diagnostics fact JSON
+      set_fact:
+        diagnostics:
+          period:
+            start: "{{ start_date }}"
+            end: "{{ end_date }}"
+          host: "{{ inventory_hostname }}"
+          hdfs_path: "{{ hdfs_path }}"
+          hdfs_summary: "{{ hdfs_summary.stdout_lines }}"
+          hdfs_metadata_snippet: "{{ hdfs_metadata.stdout | default('') | truncate(4000, True, '') }}"
+          hdfs_audit_files: "{{ lookup('fileglob', report_dir + '/hdfs_audit/*', wantlist=True) | map('basename') | list }}"
+          ranger_audit_files: "{{ lookup('fileglob', report_dir + '/ranger_audit/*', wantlist=True) | map('basename') | list }}"
+          hive_metastore_logs: "{{ lookup('fileglob', report_dir + '/hive_metastore/*', wantlist=True) | map('basename') | list }}"
+          metastore_query: "{{ metastore_query.stdout | default('not_run') }}"
+          spark_history_files: "{{ lookup('fileglob', report_dir + '/spark_history/*', wantlist=True) | map('basename') | list }}"
+          yarn_logs_files: "{{ lookup('fileglob', report_dir + '/yarn_logs/*', wantlist=True) | map('basename') | list }}"
+          cm_audit: "{{ cm_audit.content | default('not_run') }}"
+          os_updates: "{{ os_updates.stdout | default('') }}"
+
+    - name: Save diagnostics JSON to file
+      copy:
+        dest: "{{ report_dir }}/etl_forensics_{{ inventory_hostname }}.json"
+        content: "{{ diagnostics | to_nice_json }}"
+
+    - name: Fetch all files in report_dir
+      find:
+        paths: "{{ report_dir }}"
+        file_type: file
+      register: report_files
+
+    - name: Copy each file to controller
+      fetch:
+        src: "{{ item.path }}"
+        dest: "./collected/{{ inventory_hostname }}/"
+        flat: yes
+      loop: "{{ report_files.files }}"
+
+    - name: Show path of saved JSON
+      debug:
+        msg: "Saved diagnostics JSON: {{ report_dir }}/etl_forensics_{{ inventory_hostname }}.json"

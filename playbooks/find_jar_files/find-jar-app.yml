@@ -1,0 +1,56 @@
+---
+- name: Ricerca file JAR su host remoti
+  hosts: all
+  serial: 1   # Elabora un host alla volta
+  become: yes
+  gather_facts: yes
+
+  vars:
+    jar_files:
+      - postgresql-42.7.9.jar
+      - jackson-databind-2.21.0.jar
+      - jboss-logging-3.6.2.Final.jar
+    search_path: "/mnt"   # Puoi restringere a /opt, /usr/local, ecc.
+
+  tasks:
+    - name: Ricerca file JAR
+      find:
+        paths: "{{ search_path }}"
+        patterns: "{{ item }}"
+        recurse: yes
+      loop: "{{ jar_files }}"
+      register: jar_search
+
+    - name: Colleziona risultati in un dizionario
+      set_fact:
+        jar_results: >-
+          {{
+            (jar_results | default({})) |
+            combine({item.item: (item.files | map(attribute='path') | list | default([]))})
+          }}
+      loop: "{{ jar_search.results }}"
+
+    - name: Normalizza risultati (aggiungi "Non trovato" se vuoto)
+      set_fact:
+        final_results: >-
+          {{
+            final_results | default({}) |
+            combine({item.key: (item.value if item.value|length > 0 else ['Non trovato'])})
+          }}
+      loop: "{{ jar_results | dict2items }}"
+
+    - name: Mostra risultati su stdout
+      debug:
+        msg: "{{ inventory_hostname }} -> {{ final_results }}"
+
+    - name: Scrivi risultati in un file cumulativo locale
+      local_action:
+        module: lineinfile
+        path: ./risultati-jar-$(date "+%Y%m%d%H%M%S").txt
+        line: |
+          {{ inventory_hostname }}:
+          {% for jar, paths in final_results.items() %}
+            - {{ jar }} : {{ paths | join(', ') }}
+          {% endfor %}
+        create: yes
+        insertafter: EOF
