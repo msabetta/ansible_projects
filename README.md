@@ -1,4 +1,4 @@
-```markdown
+````markdown
 # ansible_projects
 
 Collection of automation projects and playbooks built with **Ansible** for system configuration, deployment, and infrastructure management.
@@ -18,8 +18,7 @@ Ansible is an open-source automation platform used for configuration management,
 
 Example structure of the repository:
 
-```
-
+```text
 ansible_projects/
 │
 ├── inventory/
@@ -37,32 +36,31 @@ ansible_projects/
 ├── group_vars/
 ├── host_vars/
 └── README.md
-
 ````
 
 ### Description
 
-- **inventory/** – Inventory files that define managed hosts
-- **playbooks/** – Ansible playbooks used to execute tasks
-- **roles/** – Reusable roles for modular automation
-- **group_vars/** – Variables applied to host groups
-- **host_vars/** – Variables applied to specific hosts
+* **inventory/** – Inventory files that define managed hosts
+* **playbooks/** – Ansible playbooks used to execute tasks
+* **roles/** – Reusable roles for modular automation
+* **group_vars/** – Variables applied to host groups
+* **host_vars/** – Variables applied to specific hosts
 
 ## Requirements
 
 Before using these playbooks you need:
 
-- Python 3.x
-- Ansible installed on the control machine
-- SSH access to target hosts
+* Python 3.x
+* Ansible installed on the control machine
+* SSH access to target hosts
 
 Install Ansible with:
 
 ```bash
 pip install ansible
-````
+```
 
-or
+or on Debian/Ubuntu:
 
 ```bash
 sudo apt install ansible
@@ -70,22 +68,22 @@ sudo apt install ansible
 
 ## Usage
 
-1. Clone the repository
+1. Clone the repository:
 
 ```bash
 git clone https://github.com/msabetta/ansible_projects.git
 cd ansible_projects
 ```
 
-2. Edit the inventory file
+2. Edit the inventory file:
 
-```
+```text
 inventory/hosts
 ```
 
-Example:
+Example content:
 
-```
+```ini
 [all]
 master1.local
 master2.local
@@ -107,7 +105,7 @@ worker4.local
 worker5.local
 ```
 
-3. Run a playbook
+3. Run a playbook:
 
 ```bash
 ansible-playbook -i inventory/hosts playbooks/create_user.yml
@@ -128,9 +126,7 @@ ansible-playbook -i inventory/hosts playbooks/example_playbook.yml
 
 ## Contributing
 
-Contributions are welcome.
-
-Steps:
+Contributions are welcome. Steps:
 
 1. Fork the repository
 2. Create a new branch
