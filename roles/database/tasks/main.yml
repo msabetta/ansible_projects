@@ -1,0 +1,45 @@
+---
+- name: Install database packages
+  package:
+    name: "{{ db_packages }}"
+    state: present
+  become: yes
+
+- name: Start database service
+  service:
+    name: "{{ db_service_name }}"
+    state: started
+    enabled: yes
+  become: yes
+
+- name: Wait for database to be ready
+  wait_for:
+    port: "{{ db_port }}"
+    delay: 2
+    timeout: 30
+
+- name: Create database
+  community.mysql.mysql_db:
+    name: "{{ db_name }}"
+    state: present
+    login_port: "{{ db_port }}"
+  when: ansible_os_family == "Debian"
+
+- name: Create database user
+  community.mysql.mysql_user:
+    name: "{{ db_user }}"
+    password: "{{ db_password }}"
+    priv: "{{ db_name }}.*:ALL"
+    state: present
+    login_port: "{{ db_port }}"
+  when: ansible_os_family == "Debian"
+
+- name: Configure database
+  template:
+    src: "{{ db_config_template }}"
+    dest: "{{ db_config_path }}"
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Restart database service
+  become: yes

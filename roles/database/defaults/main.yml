@@ -1,0 +1,27 @@
+---
+# Database default variables
+
+# Database server configuration
+db_host: localhost
+db_port: 5432
+db_name: myapp_db
+db_user: dbuser
+db_password: "changeme"
+
+# Database type
+db_type: postgresql
+
+# Connection settings
+db_connection_timeout: 30
+db_pool_size: 5
+db_max_overflow: 10
+
+# Backup settings
+db_backup_enabled: true
+db_backup_retention_days: 7
+db_backup_path: /backups/database
+
+# Performance tuning
+db_max_connections: 100
+db_shared_buffers: 256MB
+db_effective_cache_size: 1GB

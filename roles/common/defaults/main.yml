@@ -1,0 +1,37 @@
+---
+# Common role defaults
+
+# System packages
+common_packages:
+  - git
+  - curl
+  - wget
+  - vim
+  - htop
+
+# System users
+common_users: []
+
+# System groups
+common_groups: []
+
+# NTP configuration
+ntp_enabled: true
+ntp_timezone: UTC
+
+# SSH configuration
+ssh_port: 22
+ssh_permit_root_login: false
+
+# Firewall
+firewall_enabled: true
+firewall_allowed_ports:
+  - 22
+  - 80
+  - 443
+
+# System limits
+system_max_open_files: 65536
+
+# Logging
+logging_level: info

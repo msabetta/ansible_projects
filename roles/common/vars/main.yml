@@ -1,0 +1,47 @@
+---
+# Common role variables
+
+# System packages
+common_packages:
+  - git
+  - curl
+  - wget
+  - vim
+  - htop
+  - net-tools
+
+# System users
+common_users:
+  - name: ansible
+    shell: /bin/bash
+    home: /home/ansible
+
+# System groups
+common_groups:
+  - name: wheel
+  - name: docker
+
+# Timezone
+system_timezone: UTC
+
+# NTP settings
+ntp_enabled: true
+ntp_servers:
+  - 0.pool.ntp.org
+  - 1.pool.ntp.org
+
+# SSH configuration
+ssh_port: 22
+ssh_permit_root_login: false
+
+# Firewall
+firewall_enabled: true
+firewall_allowed_ports:
+  - 22
+  - 80
+  - 443
+
+# System limits
+system_limits:
+  nofile: 65536
+  nproc: 65536

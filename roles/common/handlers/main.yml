@@ -1,0 +1,29 @@
+---
+- name: Restart sshd
+  service:
+    name: sshd
+    state: restarted
+  listen: "restart sshd"
+
+- name: Restart networking
+  service:
+    name: networking
+    state: restarted
+  listen: "restart networking"
+
+- name: Reload systemd
+  systemd:
+    daemon_reload: yes
+  listen: "reload systemd"
+
+- name: Restart rsyslog
+  service:
+    name: rsyslog
+    state: restarted
+  listen: "restart rsyslog"
+
+- name: Update package cache
+  apt:
+    update_cache: yes
+  listen: "update cache"
+  when: ansible_os_family == "Debian"

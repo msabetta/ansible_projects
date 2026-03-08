@@ -1,0 +1,30 @@
+---
+- name: restart apache2
+  service:
+    name: apache2
+    state: restarted
+  listen: "restart webserver"
+
+- name: reload apache2
+  service:
+    name: apache2
+    state: reloaded
+  listen: "reload webserver"
+
+- name: restart nginx
+  service:
+    name: nginx
+    state: restarted
+  listen: "restart webserver"
+
+- name: reload nginx
+  service:
+    name: nginx
+    state: reloaded
+  listen: "reload webserver"
+
+- name: restart php-fpm
+  service:
+    name: php-fpm
+    state: restarted
+  listen: "restart webserver"

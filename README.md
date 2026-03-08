@@ -1,4 +1,4 @@
-# ansible_projects
+# Ansible Projects
 
 Collection of automation projects and playbooks built with **Ansible** for system configuration, deployment, and infrastructure management.
 
@@ -104,16 +104,10 @@ worker4.local
 worker5.local
 ```
 
-3. Run a playbook:
+3. Run an example playbook:
 
 ```bash
 ansible-playbook -i inventory/hosts playbooks/create_user.yml
-```
-
-## Example Playbook Execution
-
-```bash
-ansible-playbook -i inventory/hosts playbooks/example_playbook.yml
 ```
 
 ## Best Practices

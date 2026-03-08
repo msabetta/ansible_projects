@@ -1,0 +1,30 @@
+---
+- name: Restart database service
+  service:
+    name: postgresql
+    state: restarted
+  listen: "restart database"
+
+- name: Reload database configuration
+  service:
+    name: postgresql
+    state: reloaded
+  listen: "reload database"
+
+- name: Start database service
+  service:
+    name: postgresql
+    state: started
+  listen: "start database"
+
+- name: Stop database service
+  service:
+    name: postgresql
+    state: stopped
+  listen: "stop database"
+
+- name: Enable database service
+  service:
+    name: postgresql
+    enabled: yes
+  listen: "enable database"

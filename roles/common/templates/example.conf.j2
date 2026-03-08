@@ -1,0 +1,33 @@
+# Configuration file for common role
+# Generated from Ansible template
+
+# Server settings
+server_name = {{ server_name | default('localhost') }}
+server_port = {{ server_port | default(8080) }}
+server_bind = {{ server_bind | default('0.0.0.0') }}
+
+# Logging configuration
+log_level = {{ log_level | default('INFO') }}
+log_file = {{ log_file | default('/var/log/application.log') }}
+
+# Database settings
+{% if enable_database | default(false) %}
+db_host = {{ db_host | default('localhost') }}
+db_port = {{ db_port | default(5432) }}
+db_name = {{ db_name | default('myapp') }}
+db_user = {{ db_user }}
+{% endif %}
+
+# Feature flags
+{% for feature in features | default([]) %}
+feature_{{ feature.name }} = {{ feature.enabled | default(true) | lower }}
+{% endfor %}
+
+# Environment
+environment = {{ ansible_environment | default('production') }}
+debug = {{ debug_mode | default(false) | lower }}
+
+# Additional configuration
+{% if additional_config is defined %}
+{{ additional_config }}
+{% endif %}

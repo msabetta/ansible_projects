@@ -1,0 +1,33 @@
+---
+# Webserver role default variables
+
+# HTTP/HTTPS ports
+webserver_http_port: 80
+webserver_https_port: 443
+
+# Webserver service
+webserver_service_name: nginx
+webserver_service_state: started
+webserver_service_enabled: true
+
+# User and group
+webserver_user: www-data
+webserver_group: www-data
+
+# Document root
+webserver_document_root: /var/www/html
+
+# SSL/TLS
+webserver_ssl_enabled: false
+webserver_ssl_cert_path: /etc/ssl/certs/server.crt
+webserver_ssl_key_path: /etc/ssl/private/server.key
+
+# Performance
+webserver_worker_processes: auto
+webserver_worker_connections: 1024
+webserver_keepalive_timeout: 65
+
+# Logging
+webserver_access_log: /var/log/nginx/access.log
+webserver_error_log: /var/log/nginx/error.log
+webserver_log_level: warn

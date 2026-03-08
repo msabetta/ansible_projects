@@ -1,0 +1,35 @@
+# MySQL Configuration Template
+# Generated from Ansible template
+
+[mysqld]
+# Basic Settings
+pid-file = /var/run/mysqld/mysqld.pid
+socket = /var/run/mysqld/mysqld.sock
+datadir = {{ mysql_datadir | default('/var/lib/mysql') }}
+port = {{ mysql_port | default(3306) }}
+bind-address = {{ mysql_bind_address | default('127.0.0.1') }}
+
+# Performance Settings
+max_connections = {{ mysql_max_connections | default(100) }}
+max_allowed_packet = {{ mysql_max_allowed_packet | default('16M') }}
+thread_stack = {{ mysql_thread_stack | default('192K') }}
+thread_cache_size = {{ mysql_thread_cache_size | default(8) }}
+
+# InnoDB Settings
+default-storage-engine = {{ mysql_storage_engine | default('InnoDB') }}
+innodb_buffer_pool_size = {{ mysql_innodb_buffer_pool_size | default('256M') }}
+innodb_log_file_size = {{ mysql_innodb_log_file_size | default('100M') }}
+
+# Logging
+log-error = /var/log/mysql/error.log
+log_queries_not_using_indexes = {{ mysql_log_queries_not_using_indexes | default('0') }}
+
+[mysqldump]
+quick
+quote-names
+max_allowed_packet = {{ mysql_max_allowed_packet | default('16M') }}
+
+[mysql]
+
+[isamchk]
+key_buffer_size = {{ mysql_key_buffer_size | default('16M') }}

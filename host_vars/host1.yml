@@ -1,0 +1,30 @@
+---
+# Host variables for host1
+
+# Network configuration
+ansible_host: 192.168.1.10 #host1 IP address
+ansible_port: 22
+ansible_user: ansible
+ansible_password: "{{ vault_ansible_password }}"
+
+# System information
+system_hostname: host1
+timezone: UTC
+
+# Package management
+package_manager: apt
+packages_to_install:
+  - curl
+  - wget
+  - git
+  - python3-pip
+
+# Service configuration
+services_enabled:
+  - ssh
+  - cron
+
+# Custom variables
+environment: production
+app_version: "1.0.0"
+enable_monitoring: true

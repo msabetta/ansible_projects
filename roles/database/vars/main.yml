@@ -1,0 +1,31 @@
+---
+# Database role variables
+
+# Database server configuration
+db_host: localhost
+db_port: 5432
+db_name: myapp_db
+db_user: dbuser
+db_password: "{{ vault_db_password }}"
+
+# Database engine
+db_engine: postgresql
+db_version: "13"
+
+# Connection settings
+db_charset: utf8
+db_collation: en_US.UTF-8
+
+# Backup configuration
+db_backup_enabled: true
+db_backup_path: /var/backups/database
+db_backup_retention_days: 30
+
+# Performance tuning
+db_max_connections: 100
+db_shared_buffers: 256MB
+db_effective_cache_size: 1GB
+
+# Monitoring
+db_monitoring_enabled: true
+db_log_level: info

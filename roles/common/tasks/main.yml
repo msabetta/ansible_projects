@@ -1,0 +1,56 @@
+---
+- name: Update package cache
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+  when: ansible_os_family == "Debian"
+
+- name: Install common packages
+  package:
+    name: "{{ item }}"
+    state: present
+  loop:
+    - git
+    - curl
+    - wget
+    - vim
+    - htop
+    - net-tools
+
+- name: Set timezone
+  timezone:
+    name: UTC
+
+- name: Configure SSH
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: "{{ item.regexp }}"
+    line: "{{ item.line }}"
+    state: present
+  loop:
+    - regexp: "^#?PermitRootLogin"
+      line: "PermitRootLogin no"
+    - regexp: "^#?PasswordAuthentication"
+      line: "PasswordAuthentication no"
+  notify: restart ssh
+
+- name: Enable and start SSH service
+  systemd:
+    name: ssh
+    state: started
+    enabled: yes
+
+- name: Disable unnecessary services
+  systemd:
+    name: "{{ item }}"
+    state: stopped
+    enabled: no
+  loop:
+    - bluetooth
+  ignore_errors: yes
+
+handlers:
+  - name: restart ssh
+    systemd:
+      name: ssh
+      state: restarted
