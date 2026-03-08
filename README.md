@@ -1,4 +1,3 @@
-````markdown
 # ansible_projects
 
 Collection of automation projects and playbooks built with **Ansible** for system configuration, deployment, and infrastructure management.
